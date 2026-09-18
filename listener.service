@@ -1,0 +1,22 @@
+[Unit]
+Description=Jira Webhook Listener
+After=network.target
+
+[Service]
+Type=simple
+# Run as a dedicated or standard non-root user for security
+User=nobody
+Group=nogroup
+
+# Path to the executable script
+ExecStart=/opt/automation/webhook_listener.py
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Environment variables (Optional: useful if your scripts need paths)
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
