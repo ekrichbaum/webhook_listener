@@ -2,7 +2,7 @@
 import sys
 import secrets
 import subprocess
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 import json
 
 # --- CONFIGURATION ---
@@ -11,22 +11,21 @@ PORT = 8000
 
 # 1. Define all valid tokens (e.g., for key rotation or multiple projects)
 SECRET_TOKENS = [
-    "your_secure_token_here_1",
-    "your_secure_token_here_2"
+    "ac3bc73bc9e6cfc1db21e3785cc1f69a",
+    "c8ca267cb0e3167ee2bc32f78da3abd3"
 ]
 
 # 2. Map specific endpoints to their hardcoded allowed commands
 COMMAND_ROUTER = {
-    "/automation/deploy": ["/usr/local/bin/my-automation-script.sh"],
-    "/automation/sync": ["/usr/local/bin/sync-script.sh"],
-    "/automation/test": ["/usr/local/bin/test-script.sh"]
+    "/automation/LinuxValidation": ["/opt/automation/LinuxValidation.sh"],
+    "/automation/CiscoValidation": ["/opt/automation/CiscoValidation.sh"]
 }
 # ---------------------
 
 class WebhookHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         # 1. Validate Secret Token against the allowed list (Mitigates Timing Attacks)
-        auth_header = self.headers.get("X-Jira-Webhook-Secret", "")
+        auth_header = self.headers.get("X-Webhook-Secret", "")
         
         # Check if the header matches *any* token in our allowed list safely
         is_authenticated = any(secrets.compare_digest(auth_header, token) for token in SECRET_TOKENS)
@@ -50,14 +49,15 @@ class WebhookHandler(BaseHTTPRequestHandler):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=30
+                timeout=30,
+                close_fds=True,
             )
             
             response_data = {
                 "status": "success" if result.returncode == 0 else "failed",
                 "return_code": result.returncode,
-                "stdout": result.stdout,
-                "stderr": result.stderr
+                "stdout": result.stdout.strip() if result.stdout.strip() else "No output returned",
+                "stderr": result.stderr.strip()
             }
             status_code = 200 if result.returncode == 0 else 500
 
@@ -82,8 +82,9 @@ class WebhookHandler(BaseHTTPRequestHandler):
             print(f"Error sending response: {e}")
 
 def run():
-    server = HTTPServer((HOST, PORT), WebhookHandler)
-    print(f"Jira Webhook Listener running on port {PORT}...")
+    # SWAP HTTPServer for ThreadingHTTPServer
+    server = ThreadingHTTPServer((HOST, PORT), WebhookHandler)
+    print(f"Webhook Listener running on port {PORT}...")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
